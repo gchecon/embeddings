@@ -37,9 +37,10 @@ def progress_stream():
     def generate():
         while True:
             try:
-                event = q.get(timeout=30)
+                event = q.get(timeout=10)
             except queue.Empty:
-                yield "data: {}\n\n"
+                # Keepalive: comentário SSE não dispara onmessage, só mantém a conexão
+                yield ": keepalive\n\n"
                 continue
             if event is None:
                 yield f"data: {json.dumps({'status': 'done'})}\n\n"
@@ -51,6 +52,7 @@ def progress_stream():
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
     )
