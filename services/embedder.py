@@ -1,3 +1,4 @@
+import torch
 from sentence_transformers import SentenceTransformer
 
 from config import settings
@@ -8,6 +9,9 @@ _model: SentenceTransformer | None = None
 def get_model() -> SentenceTransformer:
     global _model
     if _model is None:
+        # Limita threads de CPU para não travar a máquina durante a indexação
+        if settings.TORCH_NUM_THREADS > 0:
+            torch.set_num_threads(settings.TORCH_NUM_THREADS)
         _model = SentenceTransformer(
             settings.EMBEDDING_MODEL,
             device=_resolve_device(),

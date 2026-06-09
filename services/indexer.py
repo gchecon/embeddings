@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -35,6 +36,10 @@ def index_directory(directory: str, on_progress: ProgressCallback | None = None)
         if on_progress:
             status = "skipped" if result == "skipped" else "indexed"
             on_progress(file_name, done, total, status)
+
+        # Respiro entre arquivos para não saturar CPU/rede
+        if result != "skipped":
+            time.sleep(settings.INDEXING_PAUSE_SECONDS)
 
     return {"total": total, "skipped": skipped, "errors": errors, "indexed": total - skipped - errors}
 

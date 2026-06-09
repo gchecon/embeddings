@@ -38,7 +38,11 @@ class Settings:
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "jinaai/jina-embeddings-v3")
     EMBEDDING_DEVICE: str = os.getenv("EMBEDDING_DEVICE", "cuda")
     EMBEDDING_DIM: int = int(os.getenv("EMBEDDING_DIM", "1024"))
-    EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "16"))
+    EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "4"))
+    # 0 = sem limite (usa todos os núcleos); >0 = limita threads do PyTorch
+    TORCH_NUM_THREADS: int = int(os.getenv("TORCH_NUM_THREADS", "2"))
+    # Pausa em segundos entre arquivos indexados (alivia CPU/rede)
+    INDEXING_PAUSE_SECONDS: float = float(os.getenv("INDEXING_PAUSE_SECONDS", "0.5"))
 
     POSTGRES_CONNECT_TIMEOUT: int = int(os.getenv("POSTGRES_CONNECT_TIMEOUT", "30"))
 
