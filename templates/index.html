@@ -5,13 +5,51 @@
 <style>
   .path-row { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.5rem; }
   .path-row input { flex: 1; }
+
+  /* Modal */
+  .modal-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.45); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 10px; width: 540px; max-width: 95vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,.2); display: flex; flex-direction: column;
+    max-height: 80vh;
+  }
+  .modal-header {
+    padding: .9rem 1.25rem; border-bottom: 1px solid #e5e5e5;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .modal-header h2 { font-size: 1rem; font-weight: 700; }
+  .modal-close { background: none; border: none; cursor: pointer; font-size: 1.4rem; color: #888; line-height: 1; }
+  .modal-close:hover { color: #333; }
+  .modal-path {
+    padding: .6rem 1.25rem; background: #f5f5f5; font-size: .8rem;
+    color: #555; border-bottom: 1px solid #e5e5e5; word-break: break-all; min-height: 2rem;
+  }
+  .modal-list { overflow-y: auto; flex: 1; padding: .5rem 0; }
+  .modal-list li {
+    list-style: none; padding: .45rem 1.25rem; cursor: pointer;
+    font-size: .9rem; display: flex; align-items: center; gap: .5rem;
+  }
+  .modal-list li:hover { background: #f0f4ff; }
+  .modal-list li.up { color: #888; font-style: italic; }
+  .modal-list li::before { content: "📁"; font-size: .85rem; }
+  .modal-list li.up::before { content: "↩"; font-size: .85rem; }
+  .modal-footer {
+    padding: .9rem 1.25rem; border-top: 1px solid #e5e5e5;
+    display: flex; gap: .75rem; justify-content: flex-end; align-items: center;
+  }
+  .modal-selected { font-size: .8rem; color: #555; flex: 1; word-break: break-all; }
+
+  /* Progress */
   #progress-section { display: none; }
   #progress-bar-wrap {
     background: #e0e0e0; border-radius: 99px; height: 14px; overflow: hidden; margin: 1rem 0;
   }
-  #progress-bar {
-    background: #1a1a2e; height: 100%; width: 0%; transition: width .3s;
-  }
+  #progress-bar { background: #1a1a2e; height: 100%; width: 0%; transition: width .3s; }
   #log-area {
     max-height: 260px; overflow-y: auto; font-size: .82rem; color: #555;
     border: 1px solid #ddd; border-radius: 6px; padding: .75rem; background: #fafafa;
@@ -26,6 +64,7 @@
 <div class="card">
   <div class="path-row">
     <input type="text" id="dir-input" placeholder="Caminho absoluto do diretório (ex.: C:\Documentos\PDFs)">
+    <button class="btn btn-secondary" id="browse-btn">📂 Navegar</button>
     <button class="btn" id="scan-btn">Escanear</button>
   </div>
   <p style="font-size:.85rem;color:#888;">O sistema varrerá recursivamente todos os PDFs no diretório informado.</p>
@@ -37,5 +76,23 @@
   <div id="log-area"></div>
 </div>
 
+<!-- Modal de navegação de diretórios -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Selecionar diretório</h2>
+      <button class="modal-close" id="modal-close">×</button>
+    </div>
+    <div class="modal-path" id="modal-path">—</div>
+    <ul class="modal-list" id="modal-list"></ul>
+    <div class="modal-footer">
+      <span class="modal-selected" id="modal-selected">Nenhum diretório selecionado</span>
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn" id="modal-confirm" disabled>Selecionar</button>
+    </div>
+  </div>
+</div>
+
 <script src="/static/js/progress.js"></script>
+<script src="/static/js/browse.js"></script>
 {% endblock %}

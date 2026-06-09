@@ -7,6 +7,7 @@ from routes.upload import bp as upload_bp
 from routes.search import bp as search_bp
 from routes.pdf_viewer import bp as pdf_viewer_bp
 from routes.progress import bp as progress_bp
+from routes.browse import bp as browse_bp
 
 
 def create_app() -> Flask:
@@ -20,6 +21,7 @@ def create_app() -> Flask:
     app.register_blueprint(search_bp)
     app.register_blueprint(pdf_viewer_bp)
     app.register_blueprint(progress_bp)
+    app.register_blueprint(browse_bp)
 
     @app.get("/")
     def index():
