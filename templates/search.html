@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Busca semântica{% endblock %}
+
+{% block extra_head %}
+<style>
+  .search-row { display: flex; gap: .75rem; margin-bottom: 1.5rem; }
+  .search-row input { flex: 1; }
+  .result-card {
+    background: #fff; border-radius: 8px; padding: 1.25rem 1.5rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 1rem;
+  }
+  .result-meta { font-size: .8rem; color: #777; margin-bottom: .5rem; display: flex; flex-wrap: wrap; gap: .5rem; }
+  .result-meta span { background: #f0f0f0; border-radius: 4px; padding: .1rem .5rem; }
+  .result-text { font-size: .9rem; line-height: 1.55; color: #333; white-space: pre-wrap; }
+  .result-actions { margin-top: .75rem; display: flex; gap: .5rem; }
+  .no-results { color: #888; text-align: center; padding: 2rem 0; }
+  .score-badge { background: #1a1a2e !important; color: #fff !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Busca semântica</h1>
+<div class="card">
+  <form method="get" action="/search">
+    <div class="search-row">
+      <input type="search" name="q" value="{{ query | e }}" placeholder="Digite sua busca...">
+      <button class="btn" type="submit">Buscar</button>
+    </div>
+  </form>
+</div>
+
+{% if query %}
+  <p style="margin: 1rem 0; font-size:.9rem; color:#555;">
+    {{ results | length }} resultado(s) para <strong>{{ query | e }}</strong>
+  </p>
+  {% if results %}
+    {% for r in results %}
+    <div class="result-card">
+      <div class="result-meta">
+        <span class="score-badge">Score: {{ r.score }}</span>
+        <span>{{ r.title | e }}</span>
+        {% if r.author %}<span>{{ r.author | e }}</span>{% endif %}
+        {% if r.year %}<span>{{ r.year }}</span>{% endif %}
+        <span>Páginas {{ r.page_start }}–{{ r.page_end }}</span>
+        <span>Chunk {{ r.chunk_index + 1 }}/{{ r.total_chunks }}</span>
+        <span>{{ r.language | upper }}</span>
+      </div>
+      <div class="result-text">{{ r.text | e }}</div>
+      <div class="result-actions">
+        <a class="btn" href="/pdf/{{ r.document_id }}?page={{ r.page_start }}" target="_blank">Abrir PDF</a>
+        <a class="btn btn-secondary" href="/pdf/{{ r.document_id }}?view=download">Download</a>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="no-results">Nenhum resultado encontrado.</div>
+  {% endif %}
+{% endif %}
+{% endblock %}

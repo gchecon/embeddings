@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Indexar PDFs{% endblock %}
+
+{% block extra_head %}
+<style>
+  .path-row { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.5rem; }
+  .path-row input { flex: 1; }
+  #progress-section { display: none; }
+  #progress-bar-wrap {
+    background: #e0e0e0; border-radius: 99px; height: 14px; overflow: hidden; margin: 1rem 0;
+  }
+  #progress-bar {
+    background: #1a1a2e; height: 100%; width: 0%; transition: width .3s;
+  }
+  #log-area {
+    max-height: 260px; overflow-y: auto; font-size: .82rem; color: #555;
+    border: 1px solid #ddd; border-radius: 6px; padding: .75rem; background: #fafafa;
+  }
+  #log-area p { margin-bottom: .25rem; }
+  #status-text { font-size: .9rem; color: #444; margin-bottom: .5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Indexar diretório de PDFs</h1>
+<div class="card">
+  <div class="path-row">
+    <input type="text" id="dir-input" placeholder="Caminho absoluto do diretório (ex.: C:\Documentos\PDFs)">
+    <button class="btn" id="scan-btn">Escanear</button>
+  </div>
+  <p style="font-size:.85rem;color:#888;">O sistema varrerá recursivamente todos os PDFs no diretório informado.</p>
+</div>
+
+<div id="progress-section" class="card" style="margin-top:1.5rem;">
+  <div id="status-text">Aguardando...</div>
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+  <div id="log-area"></div>
+</div>
+
+<script src="/static/js/progress.js"></script>
+{% endblock %}

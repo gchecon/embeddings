@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Visualizar PDF{% endblock %}
+
+{% block extra_head %}
+<style>
+  .viewer-wrap { height: calc(100vh - 120px); margin: 0 -1rem; }
+  iframe { width: 100%; height: 100%; border: none; }
+  .viewer-bar {
+    display: flex; align-items: center; gap: 1rem; padding: .75rem 1rem;
+    background: #fff; border-bottom: 1px solid #ddd; margin: 0 -1rem;
+  }
+  .viewer-bar a { font-size: .875rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="viewer-bar">
+  <a href="javascript:history.back()" class="btn btn-secondary">← Voltar</a>
+  <a href="/pdf/{{ doc_id }}?view=download" class="btn btn-secondary">Download</a>
+</div>
+<div class="viewer-wrap">
+  <iframe
+    src="/pdf/{{ doc_id }}?view=raw{% if page %}#page={{ page }}{% endif %}"
+    title="Visualização do PDF"
+  ></iframe>
+</div>
+{% endblock %}

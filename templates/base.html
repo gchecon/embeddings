@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}PDF Embedding System{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
+    nav {
+      background: #1a1a2e; color: #fff; padding: 0.75rem 1.5rem;
+      display: flex; align-items: center; gap: 1.5rem;
+    }
+    nav a { color: #ccc; text-decoration: none; font-size: 0.95rem; }
+    nav a:hover { color: #fff; }
+    nav .brand { font-weight: 700; color: #fff; font-size: 1.1rem; letter-spacing: 0.02em; }
+    main { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { margin-bottom: 1.25rem; font-size: 1.5rem; }
+    .card {
+      background: #fff; border-radius: 8px; padding: 1.5rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .btn {
+      display: inline-block; padding: 0.5rem 1.25rem; border-radius: 6px;
+      border: none; cursor: pointer; font-size: 0.95rem; font-weight: 600;
+      background: #1a1a2e; color: #fff; transition: background .15s;
+    }
+    .btn:hover { background: #16213e; }
+    .btn-secondary { background: #e5e5e5; color: #333; }
+    .btn-secondary:hover { background: #d0d0d0; }
+    input[type="text"], input[type="search"] {
+      width: 100%; padding: 0.55rem 0.85rem; border: 1px solid #ccc;
+      border-radius: 6px; font-size: 1rem; outline: none;
+    }
+    input:focus { border-color: #1a1a2e; }
+    .flash-error { background: #fee; border: 1px solid #f99; color: #900; padding: .75rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    .flash-ok    { background: #efe; border: 1px solid #9c9; color: #060; padding: .75rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+  </style>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <nav>
+    <span class="brand">PDF Embeddings</span>
+    <a href="/">Indexar</a>
+    <a href="/search">Buscar</a>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
