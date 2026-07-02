@@ -1,9 +1,28 @@
+import logging
+
 import torch
 from sentence_transformers import SentenceTransformer
 
 from config import settings
 
 _model: SentenceTransformer | None = None
+
+
+class _SuppressTorchDtypeWarning(logging.Filter):
+    """O config.json do modelo Jina v3 usa o campo legado `torch_dtype`,
+    o que dispara um warning interno do transformers a cada load/save de
+    config. Não temos controle sobre esse config.json, então filtramos
+    apenas essa mensagem específica (demais warnings continuam visíveis)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "torch_dtype" not in record.getMessage()
+
+
+# Filtro de Logger só é consultado no logger onde o warning é emitido
+# (não nos ancestrais, durante a propagação), então precisa ser anexado
+# diretamente aos loggers de origem, não só ao logger raiz "transformers".
+for _logger_name in ("transformers", "transformers.configuration_utils", "transformers.modeling_utils"):
+    logging.getLogger(_logger_name).addFilter(_SuppressTorchDtypeWarning())
 
 
 def get_model() -> SentenceTransformer:
@@ -18,6 +37,31 @@ def get_model() -> SentenceTransformer:
             trust_remote_code=True,
         )
     return _model
+
+
+def get_device_info() -> dict:
+    """Retorna o device efetivamente usado pelo modelo e, se for GPU, seu nome."""
+    model = get_model()
+    device = str(model.device)
+    gpu_name = None
+    if device.startswith("cuda") and torch.cuda.is_available():
+        try:
+            gpu_name = torch.cuda.get_device_name(model.device)
+        except Exception:
+            gpu_name = None
+    return {"device": "cuda" if device.startswith("cuda") else "cpu", "gpu_name": gpu_name}
+
+
+def count_tokens(texts: list[str]) -> int:
+    """Conta os tokens efetivamente enviados ao modelo (após truncamento)."""
+    if not texts:
+        return 0
+    model = get_model()
+    features = model.tokenize(texts)
+    attention_mask = features.get("attention_mask")
+    if attention_mask is not None:
+        return int(attention_mask.sum().item())
+    return sum(len(ids) for ids in features["input_ids"])
 
 
 def embed_passages(texts: list[str]) -> list[list[float]]:

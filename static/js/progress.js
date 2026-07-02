@@ -1,4 +1,12 @@
 (function () {
+  function formatDuration(seconds) {
+    if (seconds === undefined || seconds === null) return "";
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return `${m}min ${s}s`;
+  }
+
   const scanBtn = document.getElementById("scan-btn");
   const dirInput = document.getElementById("dir-input");
   const progressSection = document.getElementById("progress-section");
@@ -53,6 +61,25 @@
         return;
       }
 
+      if (data.status === "start") {
+        const gpu = data.device === "cuda" ? `GPU (${data.gpu_name || "desconhecida"})` : "CPU";
+        statusText.textContent = `Iniciando indexação de ${data.total} arquivo(s) usando ${gpu}...`;
+        const p = document.createElement("p");
+        p.textContent = `⚙️ Dispositivo: ${gpu}`;
+        logArea.appendChild(p);
+        logArea.scrollTop = logArea.scrollHeight;
+        return;
+      }
+
+      if (data.status === "summary") {
+        const p = document.createElement("p");
+        p.innerHTML = `<strong>📊 Relatório final:</strong> ${data.indexed} indexado(s), ${data.skipped} pulado(s), ${data.errors} erro(s) — ` +
+          `${data.total_chunks} chunk(s), ${data.total_tokens} token(s) — tempo total: ${formatDuration(data.total_time_seconds)}`;
+        logArea.appendChild(p);
+        logArea.scrollTop = logArea.scrollHeight;
+        return;
+      }
+
       if (data.status === "done") {
         statusText.textContent = "Varredura concluída!";
         progressBar.style.width = "100%";
@@ -67,7 +94,14 @@
 
       const p = document.createElement("p");
       const icon = data.status === "error" ? "❌" : data.status === "skipped" ? "⏭" : "✅";
-      p.textContent = `${icon} ${data.file} — ${data.status}`;
+      let detail = "";
+      if (data.status === "error") {
+        detail = ` — ${data.error || "erro desconhecido"}`;
+      } else if (data.status === "indexed") {
+        detail = ` — ${data.chunks} chunk(s), ${data.tokens} token(s)`;
+      }
+      const time = data.elapsed_seconds !== undefined ? ` (${formatDuration(data.elapsed_seconds)})` : "";
+      p.textContent = `${icon} ${data.file} — ${data.status}${detail}${time}`;
       logArea.appendChild(p);
       logArea.scrollTop = logArea.scrollHeight;
     };

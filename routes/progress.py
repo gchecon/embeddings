@@ -19,10 +19,9 @@ def get_queue(session_id: str = SESSION_KEY) -> queue.Queue:
         return _queues[session_id]
 
 
-def push_event(file: str, done: int, total: int, status: str, session_id: str = SESSION_KEY):
+def push_event(event: dict, session_id: str = SESSION_KEY):
     q = get_queue(session_id)
-    payload = json.dumps({"file": file, "done": done, "total": total, "status": status})
-    q.put(payload)
+    q.put(json.dumps(event))
 
 
 def push_done(session_id: str = SESSION_KEY):

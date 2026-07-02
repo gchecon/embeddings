@@ -1,5 +1,6 @@
 import os
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -9,7 +10,14 @@ from database import postgres, qdrant_client
 from services import chunker, embedder, language_detector, pdf_extractor
 
 
-ProgressCallback = Callable[[str, int, int, str], None]
+ProgressCallback = Callable[[dict], None]
+
+
+@dataclass
+class FileIndexResult:
+    status: str  # "indexed" ou "skipped"
+    chunks: int = 0
+    tokens: int = 0
 
 
 def index_directory(directory: str, on_progress: ProgressCallback | None = None) -> dict:
@@ -18,30 +26,75 @@ def index_directory(directory: str, on_progress: ProgressCallback | None = None)
     done = 0
     skipped = 0
     errors = 0
+    total_chunks = 0
+    total_tokens = 0
+
+    device_info = embedder.get_device_info()
+    started_at = time.perf_counter()
+
+    if on_progress:
+        on_progress({
+            "status": "start",
+            "total": total,
+            "device": device_info["device"],
+            "gpu_name": device_info["gpu_name"],
+        })
 
     for pdf_path in pdf_files:
         file_name = Path(pdf_path).name
+        file_started_at = time.perf_counter()
         try:
             result = _index_file(pdf_path)
-            if result == "skipped":
-                skipped += 1
             done += 1
         except Exception as exc:
             errors += 1
             done += 1
             if on_progress:
-                on_progress(file_name, done, total, f"error: {exc}")
+                on_progress({
+                    "file": file_name,
+                    "done": done,
+                    "total": total,
+                    "status": "error",
+                    "error": str(exc),
+                    "elapsed_seconds": round(time.perf_counter() - file_started_at, 2),
+                })
             continue
 
+        elapsed = round(time.perf_counter() - file_started_at, 2)
+        if result.status == "skipped":
+            skipped += 1
+        else:
+            total_chunks += result.chunks
+            total_tokens += result.tokens
+
         if on_progress:
-            status = "skipped" if result == "skipped" else "indexed"
-            on_progress(file_name, done, total, status)
+            on_progress({
+                "file": file_name,
+                "done": done,
+                "total": total,
+                "status": result.status,
+                "elapsed_seconds": elapsed,
+                "chunks": result.chunks,
+                "tokens": result.tokens,
+            })
 
         # Respiro entre arquivos para não saturar CPU/rede
-        if result != "skipped":
+        if result.status != "skipped":
             time.sleep(settings.INDEXING_PAUSE_SECONDS)
 
-    return {"total": total, "skipped": skipped, "errors": errors, "indexed": total - skipped - errors}
+    total_time = round(time.perf_counter() - started_at, 2)
+
+    return {
+        "total": total,
+        "skipped": skipped,
+        "errors": errors,
+        "indexed": total - skipped - errors,
+        "total_chunks": total_chunks,
+        "total_tokens": total_tokens,
+        "total_time_seconds": total_time,
+        "device": device_info["device"],
+        "gpu_name": device_info["gpu_name"],
+    }
 
 
 def _find_pdfs(directory: str) -> list[str]:
@@ -53,12 +106,12 @@ def _find_pdfs(directory: str) -> list[str]:
     return result
 
 
-def _index_file(pdf_path: str) -> str:
+def _index_file(pdf_path: str) -> FileIndexResult:
     file_hash = postgres.compute_file_hash(pdf_path)
 
     existing = postgres.find_by_hash(file_hash)
     if existing:
-        return "skipped"
+        return FileIndexResult(status="skipped")
 
     extracted = pdf_extractor.extract(pdf_path)
     language = language_detector.detect_language(extracted.full_text)
@@ -83,6 +136,7 @@ def _index_file(pdf_path: str) -> str:
     points: list[dict] = []
     texts = [c.text for c in chunks]
     vectors = embedder.embed_passages(texts)
+    total_tokens = embedder.count_tokens(texts)
 
     for idx, (chunk, vector) in enumerate(zip(chunks, vectors)):
         points.append({
@@ -108,4 +162,4 @@ def _index_file(pdf_path: str) -> str:
         })
 
     qdrant_client.upsert_points(points)
-    return "indexed"
+    return FileIndexResult(status="indexed", chunks=total_chunks, tokens=total_tokens)

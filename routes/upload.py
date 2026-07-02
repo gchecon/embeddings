@@ -29,10 +29,11 @@ def scan():
             break
 
     def run():
-        def on_progress(file, done, total, status):
-            push_event(file, done, total, status)
+        def on_progress(event):
+            push_event(event)
 
-        indexer.index_directory(directory, on_progress=on_progress)
+        summary = indexer.index_directory(directory, on_progress=on_progress)
+        push_event({"status": "summary", **summary})
         push_done()
 
     thread = threading.Thread(target=run, daemon=True)
