@@ -47,7 +47,8 @@ embeddings/
 ├── app.py                  # entry point Flask
 ├── database/
 │   ├── postgres.py         # conexão e operações no PostgreSQL
-│   └── qdrant_client.py    # conexão e operações no Qdrant
+│   ├── qdrant_client.py    # conexão e operações no Qdrant
+│   └── schema.sql          # DDL de referência da tabela documents
 ├── services/
 │   ├── pdf_extractor.py    # extração de texto + OCR com PyMuPDF
 │   ├── chunker.py          # chunking com overlapping
@@ -58,15 +59,17 @@ embeddings/
 │   ├── upload.py           # POST /scan — inicia varredura de diretório
 │   ├── search.py           # GET /search — busca semântica
 │   ├── pdf_viewer.py       # GET /pdf/<doc_id> — serve PDF do PostgreSQL
-│   └── progress.py         # GET /progress — SSE de progresso
+│   ├── progress.py         # GET /progress — SSE de progresso
+│   └── browse.py           # GET /browse — navegador de diretórios do servidor (para o modal de seleção)
 ├── templates/
 │   ├── base.html
-│   ├── index.html          # página principal: seleção de diretório
+│   ├── index.html          # página principal: seleção de diretório + modal de navegação
 │   ├── search.html         # página de busca e resultados
 │   └── viewer.html         # página de visualização do PDF
 └── static/
     └── js/
-        └── progress.js     # consome SSE e atualiza UI
+        ├── progress.js     # consome SSE e atualiza UI (device, progresso, relatório final)
+        └── browse.js       # consome /browse e alimenta o modal de seleção de diretório
 ```
 
 ## Docker Compose (Qdrant apenas)
@@ -108,17 +111,33 @@ POSTGRES_PORT=5432
 POSTGRES_DB=pdf_store
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=secret
+POSTGRES_CONNECT_TIMEOUT=30
 
 # Qdrant (Docker Compose — porta exposta localmente)
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
 QDRANT_COLLECTION=pdf_embeddings
 
+# Cache do HuggingFace (deixar vazio para usar o padrão ~/.cache/huggingface)
+HF_HOME=
+
+# Timeout de download do HuggingFace em segundos (aumentar em redes lentas ou com proxy)
+HF_HUB_DOWNLOAD_TIMEOUT=120
+
+# Proxy corporativo para downloads do HuggingFace (deixar vazio se não houver proxy)
+HTTP_PROXY=
+HTTPS_PROXY=
+NO_PROXY=localhost,127.0.0.1
+
 # Modelo de embeddings
 EMBEDDING_MODEL=jinaai/jina-embeddings-v3
 EMBEDDING_DEVICE=cuda          # ou "cpu"
 EMBEDDING_DIM=1024
-EMBEDDING_BATCH_SIZE=16
+EMBEDDING_BATCH_SIZE=4
+# Threads do PyTorch (0 = todos os núcleos; 2 recomendado para uso em desktop, evita travar a máquina)
+TORCH_NUM_THREADS=2
+# Pausa em segundos entre arquivos indexados, para aliviar CPU/rede (0 desativa)
+INDEXING_PAUSE_SECONDS=0.5
 
 # Flask
 FLASK_SECRET_KEY=troque-isto
@@ -188,10 +207,13 @@ O campo `document_id` é a chave de ligação entre Qdrant e PostgreSQL. Os camp
 ## Fluxo de indexação (`indexer.py`)
 
 ```
+antes de tudo:
+  0. resolver device (embedder.get_device_info(): cuda + nome da GPU, ou cpu) e emitir evento SSE "start"
+
 para cada PDF encontrado no diretório (recursivo):
   1. calcular SHA-256 do arquivo
   2. verificar se hash já existe em documents.file_hash
-     → se sim: pular (log: "já indexado")
+     → se sim: pular (status "skipped")
      → se não: continuar
   3. extrair texto por página com PyMuPDF
      - texto nativo da página
@@ -203,16 +225,33 @@ para cada PDF encontrado no diretório (recursivo):
      a. gerar embedding com task="retrieval.passage"
      b. montar payload conforme schema acima
      c. inserir no Qdrant
-  8. emitir evento SSE de progresso
+  8. contar tokens efetivamente enviados ao modelo (embedder.count_tokens) e o tempo gasto no arquivo
+  9. emitir evento SSE de progresso (arquivo, status, chunks, tokens, tempo)
+
+ao final:
+  10. emitir evento SSE "summary" com totais (indexados/pulados/erros, chunks, tokens, tempo total)
 ```
 
 ## Progresso em tempo real
 
 Usar **Server-Sent Events (SSE)** na rota `GET /progress` com `text/event-stream`. O frontend consome o stream com `EventSource` e atualiza uma barra de progresso. O estado de progresso é mantido em memória (dicionário global ou Redis se escalar).
 
-Evento SSE mínimo:
+O callback `ProgressCallback` (`services/indexer.py`) recebe um único `dict` (não argumentos posicionais), repassado por `push_event(event: dict)` em `routes/progress.py`. Tipos de evento emitidos por `index_directory`:
+
 ```
-data: {"file": "relatorio.pdf", "done": 3, "total": 47, "status": "indexing"}
+# 1x no início, antes de processar qualquer arquivo
+data: {"status": "start", "total": 47, "device": "cuda", "gpu_name": "NVIDIA GeForce RTX 3080"}
+
+# 1x por arquivo processado
+data: {"file": "relatorio.pdf", "done": 3, "total": 47, "status": "indexed", "elapsed_seconds": 4.21, "chunks": 12, "tokens": 3456}
+data: {"file": "outro.pdf", "done": 4, "total": 47, "status": "skipped", "elapsed_seconds": 0.01}
+data: {"file": "corrompido.pdf", "done": 5, "total": 47, "status": "error", "error": "...", "elapsed_seconds": 0.3}
+
+# 1x no final, com os totais da indexação (emitido por routes/upload.py a partir do retorno de index_directory)
+data: {"status": "summary", "total": 47, "indexed": 40, "skipped": 5, "errors": 2, "total_chunks": 512, "total_tokens": 128000, "total_time_seconds": 312.5, "device": "cuda", "gpu_name": "NVIDIA GeForce RTX 3080"}
+
+# 1x ao encerrar o stream
+data: {"status": "done"}
 ```
 
 ## Rota de busca
@@ -242,11 +281,13 @@ dependencies = [
     "psycopg[binary]",
     "qdrant-client",
     "sentence-transformers",
+    "transformers",
     "torch",
     "pymupdf",
     "pytesseract",
     "langdetect",
     "Pillow",
+    "einops",       # exigido pelo código remoto (trust_remote_code) do Jina v3
 ]
 ```
 
@@ -279,3 +320,6 @@ uv run flask --app app.py run --debug
 - O modelo usa `trust_remote_code=True` (obrigatório para Jina v3)
 - Não misturar modelos na mesma coleção Qdrant
 - Ver `Docs/Manual.md` para referência detalhada do modelo
+- `embedder.get_device_info()` expõe o device efetivo (`cuda`/`cpu`) e o nome da GPU (via `torch.cuda.get_device_name`), usado no relatório de indexação
+- `embedder.count_tokens()` conta os tokens realmente enviados ao modelo (via `model.tokenize()`, já truncados), usado para o relatório de tokens por documento
+- `embedder.py` filtra o warning `` `torch_dtype` is deprecated! Use `dtype` instead! `` dos loggers `transformers.configuration_utils`/`transformers.modeling_utils`. Causa: o `config.json` publicado pelo modelo no Hub usa o campo legado `torch_dtype`, fora do nosso controle — não remover o filtro achando que é warning morto
