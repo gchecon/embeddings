@@ -2,7 +2,7 @@ import threading
 
 from flask import Blueprint, jsonify, request
 
-from routes.progress import push_event, push_done, get_queue
+from routes.progress import push_event, push_done, get_queue, get_cancel_event
 from services import indexer
 
 bp = Blueprint("upload", __name__)
@@ -28,11 +28,18 @@ def scan():
         except Exception:
             break
 
+    cancel_event = get_cancel_event()
+    cancel_event.clear()
+
     def run():
         def on_progress(event):
             push_event(event)
 
-        summary = indexer.index_directory(directory, on_progress=on_progress)
+        summary = indexer.index_directory(
+            directory,
+            on_progress=on_progress,
+            should_cancel=cancel_event.is_set,
+        )
         push_event({"status": "summary", **summary})
         push_done()
 
@@ -40,3 +47,9 @@ def scan():
     thread.start()
 
     return jsonify({"status": "started", "directory": directory})
+
+
+@bp.post("/scan/cancel")
+def cancel_scan():
+    get_cancel_event().set()
+    return jsonify({"status": "cancelling"})

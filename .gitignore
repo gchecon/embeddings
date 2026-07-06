@@ -1,4 +1,5 @@
 .env
+/torch*
 .venv/
 __pycache__/
 *.py[cod]

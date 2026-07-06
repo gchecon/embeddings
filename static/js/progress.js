@@ -8,6 +8,7 @@
   }
 
   const scanBtn = document.getElementById("scan-btn");
+  const stopBtn = document.getElementById("stop-btn");
   const dirInput = document.getElementById("dir-input");
   const progressSection = document.getElementById("progress-section");
   const progressBar = document.getElementById("progress-bar");
@@ -15,6 +16,16 @@
   const logArea = document.getElementById("log-area");
 
   let evtSource = null;
+
+  stopBtn.addEventListener("click", async () => {
+    stopBtn.disabled = true;
+    statusText.textContent = "Interrompendo varredura...";
+    try {
+      await fetch("/scan/cancel", { method: "POST" });
+    } catch {
+      // conexão perdida; o backend pode já ter parado sozinho
+    }
+  });
 
   scanBtn.addEventListener("click", async () => {
     const directory = dirInput.value.trim();
@@ -24,6 +35,7 @@
     }
 
     scanBtn.disabled = true;
+    stopBtn.disabled = false;
     progressSection.style.display = "block";
     progressBar.style.width = "0%";
     logArea.innerHTML = "";
@@ -73,7 +85,8 @@
 
       if (data.status === "summary") {
         const p = document.createElement("p");
-        p.innerHTML = `<strong>📊 Relatório final:</strong> ${data.indexed} indexado(s), ${data.skipped} pulado(s), ${data.errors} erro(s) — ` +
+        const prefix = data.cancelled ? "⏹ <strong>Interrompido pelo usuário.</strong> " : "<strong>📊 Relatório final:</strong> ";
+        p.innerHTML = `${prefix}${data.indexed} indexado(s), ${data.skipped} pulado(s), ${data.errors} erro(s) — ` +
           `${data.total_chunks} chunk(s), ${data.total_tokens} token(s) — tempo total: ${formatDuration(data.total_time_seconds)}`;
         logArea.appendChild(p);
         logArea.scrollTop = logArea.scrollHeight;
@@ -85,6 +98,7 @@
         progressBar.style.width = "100%";
         evtSource.close();
         scanBtn.disabled = false;
+        stopBtn.disabled = true;
         return;
       }
 
@@ -110,6 +124,7 @@
       statusText.textContent = "Conexão com o servidor perdida.";
       evtSource.close();
       scanBtn.disabled = false;
+      stopBtn.disabled = true;
     };
   });
 })();

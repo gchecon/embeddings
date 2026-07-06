@@ -56,7 +56,7 @@ embeddings/
 │   ├── indexer.py          # orquestrador: extrai → chunk → embed → persiste
 │   └── language_detector.py
 ├── routes/
-│   ├── upload.py           # POST /scan — inicia varredura de diretório
+│   ├── upload.py           # POST /scan — inicia varredura de diretório; POST /scan/cancel — interrompe a varredura em curso
 │   ├── search.py           # GET /search — busca semântica
 │   ├── pdf_viewer.py       # GET /pdf/<doc_id> — serve PDF do PostgreSQL
 │   ├── progress.py         # GET /progress — SSE de progresso
@@ -133,7 +133,7 @@ NO_PROXY=localhost,127.0.0.1
 EMBEDDING_MODEL=jinaai/jina-embeddings-v3
 EMBEDDING_DEVICE=cuda          # ou "cpu"
 EMBEDDING_DIM=1024
-EMBEDDING_BATCH_SIZE=4
+EMBEDDING_BATCH_SIZE=32
 # Threads do PyTorch (0 = todos os núcleos; 2 recomendado para uso em desktop, evita travar a máquina)
 TORCH_NUM_THREADS=2
 # Pausa em segundos entre arquivos indexados, para aliviar CPU/rede (0 desativa)
@@ -211,6 +211,7 @@ antes de tudo:
   0. resolver device (embedder.get_device_info(): cuda + nome da GPU, ou cpu) e emitir evento SSE "start"
 
 para cada PDF encontrado no diretório (recursivo):
+  0.1. verificar sinalização de cancelamento (should_cancel) → se ativa, interromper o laço sem processar o arquivo
   1. calcular SHA-256 do arquivo
   2. verificar se hash já existe em documents.file_hash
      → se sim: pular (status "skipped")
@@ -228,9 +229,13 @@ para cada PDF encontrado no diretório (recursivo):
   8. contar tokens efetivamente enviados ao modelo (embedder.count_tokens) e o tempo gasto no arquivo
   9. emitir evento SSE de progresso (arquivo, status, chunks, tokens, tempo)
 
-ao final:
-  10. emitir evento SSE "summary" com totais (indexados/pulados/erros, chunks, tokens, tempo total)
+ao final (inclusive se interrompido via cancelamento):
+  10. emitir evento SSE "summary" com totais (indexados/pulados/erros, chunks, tokens, tempo total, cancelled)
 ```
+
+### Cancelamento
+
+`POST /scan/cancel` sinaliza um `threading.Event` (`routes/progress.py:get_cancel_event`) consultado por `index_directory` antes de iniciar cada arquivo (`should_cancel` em `services/indexer.py`). O cancelamento é cooperativo por arquivo: não interrompe um arquivo já em processamento, só impede o próximo. O evento `summary` inclui `"cancelled": true` quando a varredura foi interrompida pelo usuário.
 
 ## Progresso em tempo real
 
@@ -248,7 +253,7 @@ data: {"file": "outro.pdf", "done": 4, "total": 47, "status": "skipped", "elapse
 data: {"file": "corrompido.pdf", "done": 5, "total": 47, "status": "error", "error": "...", "elapsed_seconds": 0.3}
 
 # 1x no final, com os totais da indexação (emitido por routes/upload.py a partir do retorno de index_directory)
-data: {"status": "summary", "total": 47, "indexed": 40, "skipped": 5, "errors": 2, "total_chunks": 512, "total_tokens": 128000, "total_time_seconds": 312.5, "device": "cuda", "gpu_name": "NVIDIA GeForce RTX 3080"}
+data: {"status": "summary", "total": 47, "done": 47, "indexed": 40, "skipped": 5, "errors": 2, "total_chunks": 512, "total_tokens": 128000, "total_time_seconds": 312.5, "device": "cuda", "gpu_name": "NVIDIA GeForce RTX 3080", "cancelled": false}
 
 # 1x ao encerrar o stream
 data: {"status": "done"}
@@ -299,6 +304,24 @@ uv sync
 Rodar a aplicação:
 ```bash
 uv run flask --app app.py run --debug
+```
+
+### GPU/CUDA — nota de ambiente
+
+A máquina de desenvolvimento tem GPU NVIDIA RTX 2000 Ada Generation (16 GB). O `torch` vem de um índice dedicado (`pytorch-cu128`, ver `[tool.uv.sources]`/`[[tool.uv.index]]` no `pyproject.toml`) para instalar a build com CUDA em vez da build `+cpu` padrão do PyPI.
+
+O proxy corporativo bloqueia (handshake TLS falha) o domínio `download-r2.pytorch.org`, que hospeda os arquivos `.whl` reais do PyTorch (o `download.pytorch.org` só serve a página de índice). Por isso `uv sync`/`uv run` (que sincroniza antes de rodar) não conseguem baixar o torch nessa rede. Solução aplicada: baixar o wheel manualmente em uma rede sem esse bloqueio e instalar direto do arquivo local:
+
+```bash
+uv pip install "torch-2.11.0+cu128-cp313-cp313-win_amd64.whl" --reinstall
+```
+
+Use o tag `cpXXX` correspondente à versão do Python da venv do projeto (verificar com `uv run --no-sync python --version`), não a de `requires-python`.
+
+Como essa instalação não passa pelo mecanismo normal de sync do `uv`, todo `uv run`/`uv sync` subsequente tenta re-sincronizar e travar tentando baixar o torch de novo pelo índice bloqueado. **Enquanto o domínio não for liberado no proxy, use sempre `--no-sync`:**
+
+```bash
+uv run --no-sync flask --app app.py run --debug
 ```
 
 ## Convenções de código

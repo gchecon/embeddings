@@ -11,6 +11,7 @@ from services import chunker, embedder, language_detector, pdf_extractor
 
 
 ProgressCallback = Callable[[dict], None]
+CancelCheck = Callable[[], bool]
 
 
 @dataclass
@@ -20,7 +21,11 @@ class FileIndexResult:
     tokens: int = 0
 
 
-def index_directory(directory: str, on_progress: ProgressCallback | None = None) -> dict:
+def index_directory(
+    directory: str,
+    on_progress: ProgressCallback | None = None,
+    should_cancel: CancelCheck | None = None,
+) -> dict:
     pdf_files = _find_pdfs(directory)
     total = len(pdf_files)
     done = 0
@@ -28,6 +33,7 @@ def index_directory(directory: str, on_progress: ProgressCallback | None = None)
     errors = 0
     total_chunks = 0
     total_tokens = 0
+    cancelled = False
 
     device_info = embedder.get_device_info()
     started_at = time.perf_counter()
@@ -41,6 +47,10 @@ def index_directory(directory: str, on_progress: ProgressCallback | None = None)
         })
 
     for pdf_path in pdf_files:
+        if should_cancel and should_cancel():
+            cancelled = True
+            break
+
         file_name = Path(pdf_path).name
         file_started_at = time.perf_counter()
         try:
@@ -86,14 +96,16 @@ def index_directory(directory: str, on_progress: ProgressCallback | None = None)
 
     return {
         "total": total,
+        "done": done,
         "skipped": skipped,
         "errors": errors,
-        "indexed": total - skipped - errors,
+        "indexed": done - skipped - errors,
         "total_chunks": total_chunks,
         "total_tokens": total_tokens,
         "total_time_seconds": total_time,
         "device": device_info["device"],
         "gpu_name": device_info["gpu_name"],
+        "cancelled": cancelled,
     }
 
 

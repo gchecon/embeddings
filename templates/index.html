@@ -71,7 +71,10 @@
 </div>
 
 <div id="progress-section" class="card" style="margin-top:1.5rem;">
-  <div id="status-text">Aguardando...</div>
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:.75rem;">
+    <div id="status-text">Aguardando...</div>
+    <button class="btn btn-secondary" id="stop-btn" disabled>⏹ Parar</button>
+  </div>
   <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
   <div id="log-area"></div>
 </div>
